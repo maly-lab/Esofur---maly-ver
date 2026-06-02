@@ -1,0 +1,39 @@
+import sys
+from esofur_engine import EsoFurCompiler
+
+compiler = EsoFurCompiler()
+
+def run_file(path):
+    with open(path, "r") as f:
+        code = f.read()
+    compiler.compile(code)
+
+def repl():
+    print("EsoFur REPL v1")
+    print("Type 'exit' to quit")
+
+    buffer = []
+
+    while True:
+        try:
+            line = input(">>> ")
+
+            if line.strip() == "exit":
+                break
+
+            # we simulate a full program each time
+            buffer.append(line)
+
+            # wrap with boot + end so engine works properly
+            full_program = "OwO What's This?\n" + "\n".join(buffer) + "\nQwQ"
+
+            compiler.compile(full_program)
+
+        except Exception:
+            # errors already handled by compiler
+            pass
+
+if len(sys.argv) > 1:
+    run_file(sys.argv[1])
+else:
+    repl()
