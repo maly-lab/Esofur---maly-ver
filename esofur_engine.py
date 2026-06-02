@@ -1,3 +1,5 @@
+from exceptions import *
+
 class EsoFurCompiler:
     def __init__(self):
         self.symbol_table = {}
