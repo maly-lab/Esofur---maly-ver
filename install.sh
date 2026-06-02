@@ -1,17 +1,11 @@
 #!/bin/bash
 
-set -e
-
 echo "Installing EsoFur..."
 
-# get full path of repo
-DIR="$(cd "$(dirname "$0")" && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-# make sure CLI is executable
-chmod +x "$DIR/esofur"
+sudo ln -sf "$SCRIPT_DIR/esofur" /usr/local/bin/esofur
+sudo chmod +x "$SCRIPT_DIR/esofur"
 
-# create global command (no file copying, just linking)
-sudo ln -sf "$DIR/esofur" /usr/local/bin/esofur
-
-echo "EsoFur installed successfully!"
+echo "Installed successfully!"
 echo "Try: esofur run test.EsoFur"

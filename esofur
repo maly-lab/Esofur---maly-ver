@@ -1,39 +1,57 @@
-import sys
+#!/usr/bin/env python3
+
 from esofur_engine import EsoFurCompiler
+import sys
+import os
 
 compiler = EsoFurCompiler()
 
+# ---------------- RUN FILE MODE ----------------
 def run_file(path):
     with open(path, "r") as f:
         code = f.read()
     compiler.compile(code)
 
+# ---------------- REPL MODE ----------------
 def repl():
-    print("EsoFur REPL v1")
+    print("EsoFur REPL v3 (clean mode)")
     print("Type 'exit' to quit")
-
-    buffer = []
 
     while True:
         try:
-            line = input(">>> ")
+            # ALWAYS show prompt FIRST
+            line = input(">>> ").strip()
 
-            if line.strip() == "exit":
+            if line == "exit":
                 break
 
-            # we simulate a full program each time
-            buffer.append(line)
+            if not line:
+                continue
 
-            # wrap with boot + end so engine works properly
-            full_program = "OwO What's This?\n" + "\n".join(buffer) + "\nQwQ"
+            # execute AFTER input
+            result = compiler.execute_line(line)
 
-            compiler.compile(full_program)
+            # only print if engine returns something
+            if result is not None:
+                print(result)
 
-        except Exception:
-            # errors already handled by compiler
-            pass
-
-if len(sys.argv) > 1:
-    run_file(sys.argv[1])
-else:
+        except KeyboardInterrupt:
+            print("\nExiting REPL")
+            break
+# ---------------- ENTRY POINT ----------------
+if len(sys.argv) == 1:
     repl()
+
+elif sys.argv[1] == "repl":
+    repl()
+
+elif sys.argv[1] == "run":
+    if len(sys.argv) < 3:
+        print("Usage: esofur run <file.EsoFur>")
+        sys.exit(1)
+
+    run_file(sys.argv[2])
+
+else:
+    # shorthand: esofur file.EsoFur
+    run_file(sys.argv[1])
