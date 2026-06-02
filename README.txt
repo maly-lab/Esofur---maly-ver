@@ -7,14 +7,15 @@ enabled konsole/command prompt usage:
 	Linux:
 		1. download/clone repo
 		2. run in konsole:
-		cd EsoFur-Interpreter
+		cd EsoFur---maly-ver (if this doesnt work use the full path to the folder)
 		chmod +x install.sh
 		./install.sh
 	Windows:
+		(windows instruction might not work I havent tried them)
 		1. download/clone repo
 		2. open command prompt and run one of the options:
 			1. install.bat
-			2. python esofur_engine.py test.EsoFur
+			2. python esofur_engine.py
 	To run .EsoFur files use:
 	1. esofur {file path}
 	2. esofur run {file path}
