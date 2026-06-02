@@ -45,11 +45,16 @@ class EsoFurCompiler:
                 i += 1
                 if i >= len(lines):
                     return
+
                 line = lines[i].strip()
+
+            # START MARKER
+            if line == "OwO What's This?":
+                i += 1
+                continue
 
             # ---------------- CLEAN EXIT ----------------
             if line == "QwQ":
-                print("\033[38;5;15mfinished")
                 return
 
             if "QwQ" not in lines:
@@ -147,40 +152,50 @@ class EsoFurCompiler:
         line = line.strip()
 
         if not line:
-            return
+            return None
 
         # ---------------- COMMENTS ----------------
         if line.startswith("Muzzles"):
-            return
+            return None
 
         if line == "Maws":
             self.in_comment = True
-            return
+            return None
 
         if line == "Paws":
             self.in_comment = False
-            return
+            return None
 
         if self.in_comment:
-            return
+            return None
 
         # ---------------- VARIABLE DECLARATION ----------------
         if line.startswith("Notices Your"):
             parts = line.split()
 
             if len(parts) < 3:
-                self._error(i, line, "Invalid variable declaration", "Use: Notices Your <variable>")
+                self._error(
+                    i,
+                    line,
+                    "Invalid variable declaration",
+                    "Use: Notices Your <variable>"
+                )
 
             var_name = parts[2]
             self.symbol_table[var_name] = 0
-            return
+            return None
 
         # ---------------- ASSIGNMENT ----------------
         if "Pounces On" in line:
             parts = line.split("Pounces On")
 
             if len(parts) != 2:
-                self._error(i, line, "Malformed assignment", "Use: 10 Pounces On x")
+                self._error(
+                    i,
+                    line,
+                    "Malformed assignment",
+                    "Use: 10 Pounces On x"
+                )
 
             value = parts[0].strip()
             var_name = parts[1].strip()
@@ -197,18 +212,31 @@ class EsoFurCompiler:
                 value = int(value)
 
             self.symbol_table[var_name] = value
-            return
+            return None
 
         # ---------------- PRINT ----------------
         if line.startswith("Howl"):
             parts = line.split(" ", 1)
 
             if len(parts) < 2:
-                self._error(i, line, "Missing print target", "Use: Howl <variable>")
+                self._error(
+                    i,
+                    line,
+                    "Missing print target",
+                    "Use: Howl <variable>"
+                )
 
             var_name = parts[1].strip()
-            
+
             return self.symbol_table.get(var_name, 0)
 
         # ---------------- UNKNOWN ----------------
-        self._error(i, line, "Unknown keyword", "Invalid EsoFur command")
+        self._error(
+            i,
+            line,
+            "Unknown keyword",
+            "Invalid EsoFur command"
+        )
+
+        return None
+         
