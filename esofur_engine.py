@@ -1,25 +1,21 @@
 import math
+import re
 import sys
 from random import random
-from exceptions import *
+from exceptions import (
+    _divideByZero, _debug, _undefinedKeyword, _alreadyImported, _importError,
+    _noEnd, _undeclaredVar, _capError, _jumpError, _noLabel, _noStart,
+    _noBoop, _tooManyBoop, _castingFail, _unmatchedComment, _notImplemented
+)
 
 
 class EsoFurCompiler:
     def __init__(self):
         self.symbol_table = {}
+        self.local_table = {}
         self.in_comment = False
         self.imported = []
         self.imported_local = []
-
-    # ---------------- ERROR HANDLER ----------------
-    def _error(self, i, line, reason, fix):
-        print("TAKE OFF YOUR FURSUIT HEAD I CAN'T HEAR YOU")
-        print("------------------------------------------------")
-        print(f"EsoFur Error (Line {i + 1})")
-        print(f"Reason: {reason}")
-        print(f"Offending line: {line}")
-        print(f"Fix: {fix}")
-        raise SystemExit(1)
 
     # ---------------- COMPILER CORE ----------------
     def compile(self, code):
@@ -27,14 +23,10 @@ class EsoFurCompiler:
         i = 0
         built = False
         module = ""
+        next_local = False
 
-        if lines.count("Maws") != lines.count("Paws"):
-            self._error(
-                0,
-                "",
-                "Unmatched comment blocks",
-                "Ensure every 'Maws' has a matching 'Paws'"
-            )
+        if sum(1 for l in lines if "Maws" in l.strip()) != sum(1 for l in lines if "Paws" in l.strip()):
+        	raise _unmatchedComment()
 
         while i < len(lines):
             line = lines[i].strip()
@@ -48,11 +40,9 @@ class EsoFurCompiler:
                 if line == "OwO What's This?":
                     built = True
                     break
-
                 i += 1
                 if i >= len(lines):
                     return
-
                 line = lines[i].strip()
 
             # START MARKER
@@ -65,24 +55,18 @@ class EsoFurCompiler:
                 return
 
             if "QwQ" not in lines:
-                self._error(
-                    i,
-                    line,
-                    "Missing program end marker",
-                    "Every EsoFur program must contain 'QwQ'"
-                )
+                raise _noEnd()
 
             # ---------------- COMMENTS ----------------
             if line.startswith("Muzzles"):
                 i += 1
                 continue
-
-            if line == "Maws":
+            if "Maws" in line:
                 self.in_comment = True
                 i += 1
                 continue
-
-            if line == "Paws":
+                
+            if "Paws" in line:
                 self.in_comment = False
                 i += 1
                 continue
@@ -96,56 +80,46 @@ class EsoFurCompiler:
                 i += 1
                 continue
 
-            # ---------------- SYNTAX CHECK ----------------
-            if not line.istitle():
-                self._error(
-                    i,
-                    line,
-                    "Capitalisation error",
-                    "Every keyword must be written in Title Case"
-                )
+            # ---------------- SYNTAX CHECK (ignores quoted strings) ----------------
+            line_no_strings = re.sub(r'"[^"]*"', '', line)
+            if line_no_strings.strip() and not line_no_strings.istitle():
+                raise _capError()
 
             # ---------------- IMPORTS ----------------
             if line.startswith("Drag"):
-                parse = line.split()  # Drag [function] From [module]
+                parse = line.split()
                 if len(parse) < 4 or parse[2] != "From":
-                    self._error(
-                        i,
-                        line,
-                        "Malformed import statement",
-                        "Use: Drag <function> From <module>  or  Drag Everything From <module>"
-                    )
+                    raise _capError()
                 try:
                     if parse[1] == "Everything":
                         if parse[3] in self.imported:
-                            self._error(i, line, f"Module '{parse[3]}' already imported", "Remove the duplicate import")
+                            raise _alreadyImported()
                         module += "\n" + self._grabfile(parse[3])
                         self.imported.append(parse[3])
                     else:
                         key = parse[3] + "." + parse[1]
                         if key in self.imported_local or parse[3] in self.imported:
-                            self._error(i, line, f"'{key}' already imported", "Remove the duplicate import")
+                            raise _alreadyImported()
                         module += "\n" + self._grabfile(parse[3], parse[1])
                         self.imported_local.append(key)
                         self.imported.append(parse[3])
-                except SystemExit:
+                except (_alreadyImported, _importError):
                     raise
                 except Exception:
-                    self._error(i, line, f"Failed to import module '{parse[3]}'", "Check the module file exists and is valid")
+                    raise _importError(parse[3])
 
-                # Execute module code so its functions are available
                 try:
                     parse_value = self._parse_value
                     exec(module, globals(), locals())
                 except SystemExit:
                     pass
                 except Exception:
-                    self._error(i, line, "Module execution failed", "Check the module for errors")
+                    raise _importError(parse[3])
 
                 i += 1
                 continue
 
-            # Run any already-loaded module code for module-prefixed calls
+            # Run already-loaded module code
             try:
                 parse_value = self._parse_value
                 for mod in self.imported_local:
@@ -162,41 +136,55 @@ class EsoFurCompiler:
             # ---------------- VARIABLE DECLARATION ----------------
             if line.startswith("Notices Your"):
                 parts = line.split()
-
                 if len(parts) < 3:
-                    self._error(i, line, "Invalid variable declaration", "Use: Notices Your <variable>")
-
+                    raise _capError()
                 var_name = parts[2]
-                self.symbol_table[var_name] = None
+                if next_local:
+                    self.local_table[var_name] = None
+                    next_local = False
+                else:
+                    self.symbol_table[var_name] = None
+                i += 1
+                continue
+
+            # ---------------- LOCAL FLAG ----------------
+            if line == "And Leashes It":
+                next_local = True
+                i += 1
+                continue
+
+            # ---------------- CLEAR VARIABLE ----------------
+            if line.endswith("Gets Canceled"):
+                var_name = line.split("Gets Canceled")[0].strip()
+                if var_name in self.local_table:
+                    self.local_table[var_name] = None
+                elif var_name in self.symbol_table:
+                    self.symbol_table[var_name] = None
+                else:
+                    raise _undeclaredVar(var_name)
                 i += 1
                 continue
 
             # ---------------- ASSIGNMENT ----------------
             if "Pounces On" in line:
                 parts = line.split("Pounces On")
-
                 if len(parts) != 2:
-                    self._error(i, line, "Malformed assignment", "Use: <value> Pounces On <variable>")
-
+                    raise _capError()
                 value_str = parts[0].strip()
                 var_name = parts[1].strip()
-
-                if var_name not in self.symbol_table:
-                    self._error(
-                        i,
-                        line,
-                        f"Undeclared variable '{var_name}'",
-                        f"Declare it first using: Notices Your {var_name}"
-                    )
-
-                self.symbol_table[var_name] = self._assign(value_str)
+                if var_name not in self.symbol_table and var_name not in self.local_table:
+                    raise _undeclaredVar(var_name)
+                value = self._assign(value_str)
+                if var_name in self.local_table:
+                    self.local_table[var_name] = value
+                else:
+                    self.symbol_table[var_name] = value
                 i += 1
                 continue
 
             # ---------------- JUMPS ----------------
             if "Nuzzles" in line:
                 if not line.startswith("Nuzzles"):
-                    # Conditional jump: <condition> Nuzzles <label>
                     condition_str, label_str = line.split("Nuzzles", 1)
                     condition = self._parse_value(condition_str.strip())
                     label = self._assign(label_str.strip())
@@ -208,7 +196,6 @@ class EsoFurCompiler:
                     else:
                         i += 1
                 else:
-                    # Unconditional jump: Nuzzles <label>
                     label = self._assign(line.split()[1].strip())
                     if isinstance(label, int):
                         i += label
@@ -233,12 +220,32 @@ class EsoFurCompiler:
             # ---------------- PRINT ----------------
             if line.startswith("Howl"):
                 parts = line.split(" ", 1)
-
                 if len(parts) < 2:
-                    self._error(i, line, "Missing print target", "Use: Howl <variable or value>")
-
+                    raise _undefinedKeyword(self.imported, line, self.symbol_table)
                 value = self._assign(parts[1].strip())
                 print(value)
+                i += 1
+                continue
+
+            # ---------------- PRINT CHAR ----------------
+            if line.startswith("Awoo"):
+                parts = line.split()
+                if len(parts) < 2:
+                    raise _undefinedKeyword(self.imported, line, self.symbol_table)
+                value = self._parse_value(parts[1])
+                if not isinstance(value, int):
+                    raise _castingFail()
+                char = chr(value)
+                if len(parts) == 4 and parts[2] == "At":
+                    target = parts[3]
+                    if target not in self.symbol_table and target not in self.local_table:
+                        raise _undeclaredVar(target)
+                    if target in self.local_table:
+                        self.local_table[target] = char
+                    else:
+                        self.symbol_table[target] = char
+                else:
+                    print(char)
                 i += 1
                 continue
 
@@ -246,9 +253,8 @@ class EsoFurCompiler:
             if line.startswith("Eyedropper A Sparkledog At"):
                 parts = line.split()
                 if len(parts) < 5:
-                    self._error(i, line, "Malformed random command", "Use: Eyedropper A Sparkledog At <variable>")
-                var_name = parts[4]
-                self.symbol_table[var_name] = random()
+                    raise _undefinedKeyword(self.imported, line, self.symbol_table)
+                self.symbol_table[parts[4]] = random()
                 i += 1
                 continue
 
@@ -256,15 +262,15 @@ class EsoFurCompiler:
             if line.startswith("Boop The User For"):
                 text = line.split(" ", 6)
                 if len(text) < 5:
-                    self._error(i, line, "Malformed input command", "Use: Boop The User For <variable> [With <prompt>]")
+                    raise _noBoop()
                 var_name = text[4]
                 prompt = ""
                 if len(text) == 7:
                     if text[5] != "With":
-                        self._error(i, line, "Missing 'With' keyword in input command", "Use: Boop The User For <variable> With <prompt>")
+                        raise _noBoop()
                     prompt = str(self._assign(text[6])) + ":"
                 if len(text) > 7:
-                    self._error(i, line, "Too many arguments in input command", "Use: Boop The User For <variable> [With <prompt>]")
+                    raise _tooManyBoop()
                 try:
                     value = input(prompt)
                 except ValueError:
@@ -278,67 +284,233 @@ class EsoFurCompiler:
             if "Transforms Into" in line:
                 parts = line.split("Transforms Into")
                 if len(parts) != 2:
-                    self._error(i, line, "Malformed type cast", "Use: <variable> Transforms Into <type>")
+                    raise _castingFail()
                 var_name = parts[0].strip()
                 type_name = parts[1].strip()
                 value = self._parse_value(var_name)
-                self.symbol_table[var_name] = self._cast_value(value, type_name, i, line)
+                result = self._cast_value(value, type_name)
+                if var_name in self.local_table:
+                    self.local_table[var_name] = result
+                else:
+                    self.symbol_table[var_name] = result
+                i += 1
+                continue
+
+            # ---------------- CONVERT TO LIST ----------------
+            if line.endswith("Suits Up"):
+                var_name = line.split("Suits Up")[0].strip()
+                if var_name not in self.symbol_table and var_name not in self.local_table:
+                    raise _undeclaredVar(var_name)
+                value = self._parse_value(var_name)
+                result = list(value) if value is not None else []
+                if var_name in self.local_table:
+                    self.local_table[var_name] = result
+                else:
+                    self.symbol_table[var_name] = result
+                i += 1
+                continue
+
+            # ---------------- CONVERT TO FURPILE ----------------
+            if line.endswith("Starts A Furpile"):
+                var_name = line.split("Starts A Furpile")[0].strip()
+                if var_name not in self.symbol_table and var_name not in self.local_table:
+                    raise _undeclaredVar(var_name)
+                value = self._parse_value(var_name)
+                result = set(value) if value is not None else set()
+                if var_name in self.local_table:
+                    self.local_table[var_name] = result
+                else:
+                    self.symbol_table[var_name] = result
+                i += 1
+                continue
+
+            # ---------------- APPEND TO LIST ----------------
+            if line.startswith("Sew") and "Onto" in line:
+                parts = line.split("Onto")
+                if len(parts) != 2:
+                    raise _undefinedKeyword(self.imported, line, self.symbol_table)
+                var_name = parts[0].replace("Sew", "").strip()
+                list_name = parts[1].strip()
+                value = self._parse_value(var_name)
+                lst = self._parse_value(list_name)
+                if not isinstance(lst, list):
+                    raise _castingFail()
+                lst.append(value)
+                self.symbol_table[list_name] = lst
+                i += 1
+                continue
+
+            # ---------------- APPEND TO FURPILE ----------------
+            if "Joins The Pile At" in line:
+                parts = line.split("Joins The Pile At")
+                if len(parts) != 2:
+                    raise _undefinedKeyword(self.imported, line, self.symbol_table)
+                var_name = parts[0].strip()
+                pile_name = parts[1].strip()
+                value = self._parse_value(var_name)
+                pile = self._parse_value(pile_name)
+                if not isinstance(pile, set):
+                    raise _castingFail()
+                pile.add(value)
+                self.symbol_table[pile_name] = pile
+                i += 1
+                continue
+
+            # ---------------- STRING CONCATENATION ----------------
+            if line.startswith("Look!") and "Joined The" in line:
+                rest = line[len("Look!"):].strip()
+                parts = rest.split("Joined The")
+                if len(parts) != 2:
+                    raise _undefinedKeyword(self.imported, line, self.symbol_table)
+                src_name = parts[0].strip()
+                tgt_name = parts[1].strip()
+                src_value = str(self._parse_value(src_name))
+                tgt_value = str(self._parse_value(tgt_name))
+                result = tgt_value + src_value
+                if tgt_name in self.local_table:
+                    self.local_table[tgt_name] = result
+                else:
+                    self.symbol_table[tgt_name] = result
+                i += 1
+                continue
+
+            # ---------------- POP FROM LIST ----------------
+            if "'S Raffle Winner Is" in line:
+                parts = line.split("'S Raffle Winner Is")
+                if len(parts) != 2:
+                    raise _undefinedKeyword(self.imported, line, self.symbol_table)
+                list_name = parts[0].strip()
+                var_name = parts[1].strip()
+                lst = self._parse_value(list_name)
+                if not isinstance(lst, list):
+                    raise _castingFail()
+                if var_name not in self.symbol_table and var_name not in self.local_table:
+                    raise _undeclaredVar(var_name)
+                popped = lst.pop()
+                self.symbol_table[list_name] = lst
+                if var_name in self.local_table:
+                    self.local_table[var_name] = popped
+                else:
+                    self.symbol_table[var_name] = popped
+                i += 1
+                continue
+
+            # ---------------- CHECK MEMBERSHIP ----------------
+            if line.startswith("Is") and "In" in line and line.endswith("?"):
+                inner = line[len("Is"):].rstrip("?").strip()
+                parts = inner.split("In")
+                if len(parts) != 2:
+                    raise _undefinedKeyword(self.imported, line, self.symbol_table)
+                var_name = parts[0].strip()
+                pile_name = parts[1].strip()
+                value = self._parse_value(var_name)
+                pile = self._parse_value(pile_name)
+                if not isinstance(pile, set):
+                    raise _castingFail()
+                self.symbol_table["_result"] = 0 if value in pile else 1
+                i += 1
+                continue
+
+            # ---------------- REMOVE FROM LIST/FURPILE ----------------
+            if line.startswith("Escort") and "To" in line and "From" in line:
+                rest = line[len("Escort"):].strip()
+                to_split = rest.split("To")
+                if len(to_split) != 2:
+                    raise _undefinedKeyword(self.imported, line, self.symbol_table)
+                key_name = to_split[0].strip()
+                from_split = to_split[1].split("From")
+                if len(from_split) != 2:
+                    raise _undefinedKeyword(self.imported, line, self.symbol_table)
+                var_name = from_split[0].strip()
+                collection_name = from_split[1].strip()
+                key = self._parse_value(key_name)
+                collection = self._parse_value(collection_name)
+                if var_name not in self.symbol_table and var_name not in self.local_table:
+                    raise _undeclaredVar(var_name)
+                if isinstance(collection, list):
+                    if not isinstance(key, int):
+                        raise _castingFail()
+                    removed = collection.pop(key)
+                elif isinstance(collection, set):
+                    removed = key
+                    collection.discard(key)
+                else:
+                    raise _castingFail()
+                self.symbol_table[collection_name] = collection
+                if var_name in self.local_table:
+                    self.local_table[var_name] = removed
+                else:
+                    self.symbol_table[var_name] = removed
+                i += 1
+                continue
+
+            # ---------------- MEASURE LENGTH ----------------
+            if "'S Tail Length To" in line:
+                parts = line.split("'S Tail Length To")
+                if len(parts) != 2:
+                    raise _undefinedKeyword(self.imported, line, self.symbol_table)
+                src_name = parts[0].replace("Measure", "").strip()
+                tgt_name = parts[1].strip()
+                value = self._parse_value(src_name)
+                if tgt_name not in self.symbol_table and tgt_name not in self.local_table:
+                    raise _undeclaredVar(tgt_name)
+                try:
+                    length = len(value)
+                except TypeError:
+                    raise _castingFail()
+                if tgt_name in self.local_table:
+                    self.local_table[tgt_name] = length
+                else:
+                    self.symbol_table[tgt_name] = length
                 i += 1
                 continue
 
             # ---------------- MATHS ----------------
             if "Inflates By" in line:
-                self._do_maths(line, "Inflates By", "+", i)
+                self._do_maths(line, "Inflates By", "+")
                 i += 1
                 continue
 
             if "Pays" in line:
-                self._do_maths(line, "Pays", "-", i)
+                self._do_maths(line, "Pays", "-")
                 i += 1
                 continue
 
             if "Breeds By" in line:
-                self._do_maths(line, "Breeds By", "*", i)
+                self._do_maths(line, "Breeds By", "*")
                 i += 1
                 continue
 
             if "Baps" in line:
-                self._do_maths(line, "Baps", "/", i)
+                self._do_maths(line, "Baps", "/")
                 i += 1
                 continue
 
             if "Deflates By" in line:
-                self._do_maths(line, "Deflates By", "%", i)
+                self._do_maths(line, "Deflates By", "%")
                 i += 1
                 continue
 
             if "Gets Vored By" in line:
-                self._do_maths(line, "Gets Vored By", "l", i)
+                self._do_maths(line, "Gets Vored By", "l")
                 i += 1
                 continue
 
             if "Hyper-Inflates By" in line:
-                self._do_maths(line, "Hyper-Inflates By", "^", i)
+                self._do_maths(line, "Hyper-Inflates By", "^")
                 i += 1
                 continue
 
             # ---------------- UNKNOWN SYNTAX ----------------
-            self._error(
-                i,
-                line,
-                "Unknown or invalid syntax",
-                "Check EsoFur keyword spelling and capitalization"
-            )
+            raise _undefinedKeyword(self.imported, line, self.symbol_table)
 
     # ---------------- REPL EXECUTION ----------------
     def execute_line(self, line):
-        i = 0
         line = line.strip()
 
         if not line:
             return None
 
-        # ---------------- COMMENTS ----------------
         if line.startswith("Muzzles"):
             return None
 
@@ -353,67 +525,73 @@ class EsoFurCompiler:
         if self.in_comment:
             return None
 
-        # ---------------- VARIABLE DECLARATION ----------------
         if line.startswith("Notices Your"):
             parts = line.split()
-
             if len(parts) < 3:
-                self._error(i, line, "Invalid variable declaration", "Use: Notices Your <variable>")
-
-            var_name = parts[2]
-            self.symbol_table[var_name] = None
+                raise _capError()
+            self.symbol_table[parts[2]] = None
             return None
 
-        # ---------------- ASSIGNMENT ----------------
+        if line == "And Leashes It":
+            return None
+
+        if line.endswith("Gets Canceled"):
+            var_name = line.split("Gets Canceled")[0].strip()
+            if var_name in self.symbol_table:
+                self.symbol_table[var_name] = None
+            else:
+                raise _undeclaredVar(var_name)
+            return None
+
         if "Pounces On" in line:
             parts = line.split("Pounces On")
-
             if len(parts) != 2:
-                self._error(i, line, "Malformed assignment", "Use: <value> Pounces On <variable>")
-
+                raise _capError()
             value_str = parts[0].strip()
             var_name = parts[1].strip()
-
             if var_name not in self.symbol_table:
-                self._error(
-                    i,
-                    line,
-                    f"Undeclared variable '{var_name}'",
-                    f"Declare it first using: Notices Your {var_name}"
-                )
-
+                raise _undeclaredVar(var_name)
             self.symbol_table[var_name] = self._assign(value_str)
             return None
 
-        # ---------------- PRINT ----------------
         if line.startswith("Howl"):
             parts = line.split(" ", 1)
-
             if len(parts) < 2:
-                self._error(i, line, "Missing print target", "Use: Howl <variable or value>")
+                raise _undefinedKeyword(self.imported, line, self.symbol_table)
+            return self._assign(parts[1].strip())
 
-            value = self._assign(parts[1].strip())
-            return value
+        if line.startswith("Awoo"):
+            parts = line.split()
+            if len(parts) < 2:
+                raise _undefinedKeyword(self.imported, line, self.symbol_table)
+            value = self._parse_value(parts[1])
+            if not isinstance(value, int):
+                raise _castingFail()
+            char = chr(value)
+            if len(parts) == 4 and parts[2] == "At":
+                target = parts[3]
+                if target not in self.symbol_table:
+                    raise _undeclaredVar(target)
+                self.symbol_table[target] = char
+                return None
+            return char
 
-        # ---------------- RANDOM FLOAT ----------------
         if line.startswith("Eyedropper A Sparkledog At"):
             parts = line.split()
             if len(parts) < 5:
-                self._error(i, line, "Malformed random command", "Use: Eyedropper A Sparkledog At <variable>")
-            var_name = parts[4]
-            self.symbol_table[var_name] = random()
+                raise _undefinedKeyword(self.imported, line, self.symbol_table)
+            self.symbol_table[parts[4]] = random()
             return None
 
-        # ---------------- USER INPUT ----------------
         if line.startswith("Boop The User For"):
             text = line.split(" ", 6)
             if len(text) < 5:
-                self._error(i, line, "Malformed input command", "Use: Boop The User For <variable> [With <prompt>]")
+                raise _noBoop()
             var_name = text[4]
             prompt = ""
             if len(text) == 7:
                 if text[5] != "With":
-                    self._error(i, line, "Missing 'With' keyword", "Use: Boop The User For <variable> With <prompt>")
+                    raise _noBoop()
                 prompt = str(self._assign(text[6])) + ":"
             try:
                 value = input(prompt)
@@ -423,63 +601,179 @@ class EsoFurCompiler:
             self.symbol_table[var_name] = self._assign(value)
             return None
 
-        # ---------------- TYPE CASTING ----------------
         if "Transforms Into" in line:
             parts = line.split("Transforms Into")
             if len(parts) != 2:
-                self._error(i, line, "Malformed type cast", "Use: <variable> Transforms Into <type>")
+                raise _castingFail()
             var_name = parts[0].strip()
             type_name = parts[1].strip()
             value = self._parse_value(var_name)
-            self.symbol_table[var_name] = self._cast_value(value, type_name, i, line)
+            self.symbol_table[var_name] = self._cast_value(value, type_name)
             return None
 
-        # ---------------- MATHS ----------------
+        if line.endswith("Suits Up"):
+            var_name = line.split("Suits Up")[0].strip()
+            if var_name not in self.symbol_table:
+                raise _undeclaredVar(var_name)
+            value = self._parse_value(var_name)
+            self.symbol_table[var_name] = list(value) if value is not None else []
+            return None
+
+        if line.endswith("Starts A Furpile"):
+            var_name = line.split("Starts A Furpile")[0].strip()
+            if var_name not in self.symbol_table:
+                raise _undeclaredVar(var_name)
+            value = self._parse_value(var_name)
+            self.symbol_table[var_name] = set(value) if value is not None else set()
+            return None
+
+        if line.startswith("Sew") and "Onto" in line:
+            parts = line.split("Onto")
+            if len(parts) != 2:
+                raise _undefinedKeyword(self.imported, line, self.symbol_table)
+            var_name = parts[0].replace("Sew", "").strip()
+            list_name = parts[1].strip()
+            value = self._parse_value(var_name)
+            lst = self._parse_value(list_name)
+            if not isinstance(lst, list):
+                raise _castingFail()
+            lst.append(value)
+            self.symbol_table[list_name] = lst
+            return None
+
+        if "Joins The Pile At" in line:
+            parts = line.split("Joins The Pile At")
+            if len(parts) != 2:
+                raise _undefinedKeyword(self.imported, line, self.symbol_table)
+            var_name = parts[0].strip()
+            pile_name = parts[1].strip()
+            value = self._parse_value(var_name)
+            pile = self._parse_value(pile_name)
+            if not isinstance(pile, set):
+                raise _castingFail()
+            pile.add(value)
+            self.symbol_table[pile_name] = pile
+            return None
+
+        if line.startswith("Look!") and "Joined The" in line:
+            rest = line[len("Look!"):].strip()
+            parts = rest.split("Joined The")
+            if len(parts) != 2:
+                raise _undefinedKeyword(self.imported, line, self.symbol_table)
+            src_name = parts[0].strip()
+            tgt_name = parts[1].strip()
+            src_value = str(self._parse_value(src_name))
+            tgt_value = str(self._parse_value(tgt_name))
+            self.symbol_table[tgt_name] = tgt_value + src_value
+            return None
+
+        if "'S Raffle Winner Is" in line:
+            parts = line.split("'S Raffle Winner Is")
+            if len(parts) != 2:
+                raise _undefinedKeyword(self.imported, line, self.symbol_table)
+            list_name = parts[0].strip()
+            var_name = parts[1].strip()
+            lst = self._parse_value(list_name)
+            if not isinstance(lst, list):
+                raise _castingFail()
+            popped = lst.pop()
+            self.symbol_table[list_name] = lst
+            self.symbol_table[var_name] = popped
+            return None
+
+        if line.startswith("Is") and "In" in line and line.endswith("?"):
+            inner = line[len("Is"):].rstrip("?").strip()
+            parts = inner.split("In")
+            if len(parts) != 2:
+                raise _undefinedKeyword(self.imported, line, self.symbol_table)
+            var_name = parts[0].strip()
+            pile_name = parts[1].strip()
+            value = self._parse_value(var_name)
+            pile = self._parse_value(pile_name)
+            if not isinstance(pile, set):
+                raise _castingFail()
+            self.symbol_table["_result"] = 0 if value in pile else 1
+            return None
+
+        if line.startswith("Escort") and "To" in line and "From" in line:
+            rest = line[len("Escort"):].strip()
+            to_split = rest.split("To")
+            if len(to_split) != 2:
+                raise _undefinedKeyword(self.imported, line, self.symbol_table)
+            key_name = to_split[0].strip()
+            from_split = to_split[1].split("From")
+            if len(from_split) != 2:
+                raise _undefinedKeyword(self.imported, line, self.symbol_table)
+            var_name = from_split[0].strip()
+            collection_name = from_split[1].strip()
+            key = self._parse_value(key_name)
+            collection = self._parse_value(collection_name)
+            if isinstance(collection, list):
+                removed = collection.pop(key)
+            elif isinstance(collection, set):
+                removed = key
+                collection.discard(key)
+            else:
+                raise _castingFail()
+            self.symbol_table[collection_name] = collection
+            self.symbol_table[var_name] = removed
+            return None
+
+        if "'S Tail Length To" in line:
+            parts = line.split("'S Tail Length To")
+            if len(parts) != 2:
+                raise _undefinedKeyword(self.imported, line, self.symbol_table)
+            src_name = parts[0].replace("Measure", "").strip()
+            tgt_name = parts[1].strip()
+            value = self._parse_value(src_name)
+            try:
+                length = len(value)
+            except TypeError:
+                raise _castingFail()
+            self.symbol_table[tgt_name] = length
+            return None
+
         if "Inflates By" in line:
-            self._do_maths(line, "Inflates By", "+", i)
+            self._do_maths(line, "Inflates By", "+")
             return None
 
         if "Pays" in line:
-            self._do_maths(line, "Pays", "-", i)
+            self._do_maths(line, "Pays", "-")
             return None
 
         if "Breeds By" in line:
-            self._do_maths(line, "Breeds By", "*", i)
+            self._do_maths(line, "Breeds By", "*")
             return None
 
         if "Baps" in line:
-            self._do_maths(line, "Baps", "/", i)
+            self._do_maths(line, "Baps", "/")
             return None
 
         if "Deflates By" in line:
-            self._do_maths(line, "Deflates By", "%", i)
+            self._do_maths(line, "Deflates By", "%")
             return None
 
         if "Gets Vored By" in line:
-            self._do_maths(line, "Gets Vored By", "l", i)
+            self._do_maths(line, "Gets Vored By", "l")
             return None
 
         if "Hyper-Inflates By" in line:
-            self._do_maths(line, "Hyper-Inflates By", "^", i)
+            self._do_maths(line, "Hyper-Inflates By", "^")
             return None
 
-        # ---------------- UNKNOWN ----------------
-        self._error(i, line, "Unknown keyword", "Invalid EsoFur command")
-        return None
+        raise _undefinedKeyword(self.imported, line, self.symbol_table)
 
     # ================================================
     # ---------------- HELPER METHODS ----------------
     # ================================================
 
     def _find_label_index(self, lines, label):
-        """Find the line index of a Marks label."""
         for idx, l in enumerate(lines):
             if l.strip().startswith("Marks") and l.strip().split(" ")[1] == label:
                 return idx
-        self._error(0, label, f"Label '{label}' not found", "Ensure the label is defined with: Marks <label>")
+        raise _noLabel(label)
 
     def _find_loop_start_index(self, lines, end_index):
-        """Walk backwards from a loop end to find the matching *Starts Roleplaying* line, supporting nesting."""
         loop_count = 0
         for idx in range(end_index - 1, -1, -1):
             stripped = lines[idx].strip()
@@ -490,49 +784,50 @@ class EsoFurCompiler:
                     return idx
                 else:
                     loop_count -= 1
-        self._error(end_index, "*Stops Roleplaying*", "No matching loop start found", "Add '*Starts Roleplaying*' before this loop end")
+        raise _noStart()
 
     def _assign(self, value_str):
-        """Resolve a value string to a Python value: integer literal, quoted string, or variable lookup."""
         value_str = str(value_str)
         if value_str.isdigit():
             return int(value_str)
         if '"' in value_str:
             return value_str[value_str.find('"') + 1:value_str.rfind('"')]
+        if value_str in self.local_table:
+            return self.local_table[value_str]
         if value_str in self.symbol_table:
             return self.symbol_table[value_str]
         return value_str
 
     def _parse_value(self, value_str):
-        """Evaluate a value string, supporting literals, variables, and expressions."""
         value_str = str(value_str)
         if value_str.isdigit():
             return int(value_str)
+        if value_str in self.local_table:
+            return self.local_table[value_str]
         if value_str in self.symbol_table:
             return self.symbol_table[value_str]
         try:
-            return eval(value_str, {}, self.symbol_table)
+            combined = {**self.symbol_table, **self.local_table}
+            return eval(value_str, {}, combined)
         except Exception:
-            self._error(0, value_str, f"Cannot evaluate expression '{value_str}'", "Check the expression uses valid variables and operators")
+            raise _jumpError(value_str, self.symbol_table)
 
-    def _cast_value(self, value, type_name, i=0, line=""):
-        """Cast a value to the requested EsoFur type."""
+    def _cast_value(self, value, type_name):
         type_map = {
-            "Int":      int,
-            "Float":    float,
-            "Str":      str,
-            "List":     list,
-            "Furpile":  set,
+            "Int":     int,
+            "Float":   float,
+            "Str":     str,
+            "List":    list,
+            "Furpile": set,
         }
         if type_name not in type_map:
-            self._error(i, line, f"Unknown type '{type_name}'", "Valid types: Int, Float, Str, List, Furpile")
+            raise _castingFail()
         try:
             return type_map[type_name](value)
         except (ValueError, TypeError):
-            self._error(i, line, f"Cannot cast '{value}' to {type_name}", "Check the value is compatible with the target type")
+            raise _castingFail()
 
-    def _do_maths(self, line, keyword, operation, i=0):
-        """Apply a math operation between two operands and store the result in the left variable."""
+    def _do_maths(self, line, keyword, operation):
         var_1, var_2 = map(str.strip, line.split(keyword, 1))
         num_1 = self._parse_value(var_1)
         num_2 = self._parse_value(var_2)
@@ -545,7 +840,7 @@ class EsoFurCompiler:
             num_1 *= num_2
         elif operation == "/":
             if num_2 == 0:
-                self._error(i, line, "Division by zero", "The divisor (right-hand value) must not be zero")
+                raise _divideByZero()
             num_1 = num_1 / num_2
         elif operation == "%":
             num_1 %= num_2
@@ -554,10 +849,12 @@ class EsoFurCompiler:
         elif operation == "^":
             num_1 **= num_2
 
-        self.symbol_table[var_1] = num_1
+        if var_1 in self.local_table:
+            self.local_table[var_1] = num_1
+        else:
+            self.symbol_table[var_1] = num_1
 
     def _grabfile(self, module, *word):
-        """Read an EsoFur module file, optionally extracting a single named block."""
         with open(module + ".EsoFurMod", "r") as f:
             source_code = f.read()
         if not word:
@@ -566,4 +863,4 @@ class EsoFurCompiler:
         for block in blocks:
             if block.startswith("\n#" + word[0]):
                 return block
-        self._error(0, module, f"Function '{word[0]}' not found in module '{module}'", "Check the module file contains a matching #NEXT block")
+        raise _importError(module)
