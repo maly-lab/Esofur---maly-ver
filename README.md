@@ -1,44 +1,101 @@
-This is a upload of the EsoFur-Interpreter by TaseTheFox (link:https://github.com/TaserTheFox/EsoFur-Interpreter) but with clanker (AI) modifications.
-I wanted to use the langauge but it was missing some features and I didn't want to mess with the code myself tbh so I just got a clanker to do it.
+# EsoFur Interpreter — Modified
 
-Changes made:
+A fork of the [EsoFur Interpreter](https://github.com/TaserTheFox/EsoFur-Interpreter) by TaserTheFox, with AI-assisted modifications.
 
-enabled konsole/command prompt usage:
-	Linux:
-		1. download/clone repo
-		2. run in konsole:
-		cd EsoFur---maly-ver (if this doesnt work use the full path to the folder)
-		chmod +x install.sh
-		./install.sh
-	Windows:
-		(windows instruction might not work I havent tried them)
-		1. download/clone repo
-		2. open command prompt and run one of the options:
-			1. install.bat
-			2. python esofur_engine.py
-	To run .EsoFur files use:
-	1. esofur {file path}
-	2. esofur run {file path}
-	
-	There is a test file in the repo call test.EsoFur
-	Make sure to use the full or relative file path
-	and that the file is a EsoFur file
-	
-	To write and edit in cmd prompt or Konsole use run: esofur
-	Pasting code here breaks how the console looks 
-	but if you press enter it should still run
-	(This code cant be saved though does work if you want to just mess around)
-	
-Enabled VS code use by pressing ctrl+shift+b/f5 (whatever u prefer):
-	To do this open up a folder with the file you want to run
-	
-	create a new folder called .vscode in the folder:
-	
-		create a file called tasks.json and copy the code from vs_tasks.txt (in the repo docs folder)
-			- this enables you to run the code using ctrl+shift+b
-			
-		create a file called launch.json and copy the code from vs_launch.txt (in the repo docs folder)
-			- will not work without tasks.json set-up
-			- enables you to press f5 to run code
+The original language was missing some features I wanted to use, so I had an AI (Claude) implement them rather than diving into the code myself.
 
-Commands can be found in "EsoFur Modules.txt"
+---
+
+## Changes Made
+
+- Enabled terminal usage (Linux & Windows)
+- Enabled VS Code integration
+
+---
+
+## Installation
+
+### Linux
+
+1. Download or clone the repo
+2. Run the following in your terminal:
+
+```bash
+cd EsoFur---maly-ver
+chmod +x install.sh
+./install.sh
+```
+
+> If `cd EsoFur---maly-ver` doesn't work, use the full path to the folder.
+
+### Windows
+
+> ⚠️ Windows instructions are untested — use at your own risk.
+
+1. Download or clone the repo
+2. Open Command Prompt in the project folder and run:
+
+```bat
+install.bat
+```
+
+Alternatively, you can run the interpreter directly with:
+
+```bat
+python esofur_engine.py
+```
+
+---
+
+## Running `.EsoFur` Files
+
+```bash
+esofur {file path}
+```
+
+or
+
+```bash
+esofur run {file path}
+```
+
+> Make sure to use the full or relative file path, and that the file has the `.EsoFur` extension.
+
+A test file `test.EsoFur` is included in the repo to verify your setup.
+
+---
+
+## Interactive Console
+
+Running `esofur` with no arguments opens an interactive console in your terminal:
+
+```bash
+esofur
+```
+
+> ⚠️ Pasting multi-line code may affect how the console looks, but pressing Enter should still execute it. Code entered this way cannot be saved.
+
+---
+
+## VS Code Integration
+
+To run `.EsoFur` files directly from VS Code:
+
+1. Open the folder containing your `.EsoFur` file
+2. Create a `.vscode` folder inside it
+3. Inside `.vscode`, create the following two files:
+
+**`tasks.json`** — copy the contents from `docs/vs_tasks.txt` in the repo
+
+- Enables running your file with `Ctrl+Shift+B`
+
+**`launch.json`** — copy the contents from `docs/vs_launch.txt` in the repo
+
+- Enables running your file with `F5`
+- Requires `tasks.json` to be set up first
+
+---
+
+## Commands
+
+A full list of EsoFur commands can be found in `EsoFur Modules.txt`.
