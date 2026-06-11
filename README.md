@@ -1,8 +1,8 @@
 # EsoFur Interpreter — Modified
 
-A fork of the [EsoFur Interpreter](https://github.com/TaserTheFox/EsoFur-Interpreter) by TaserTheFox, with AI-assisted modifications.
+A fork of the [EsoFur Interpreter](https://github.com/TaserTheFox/EsoFur-Interpreter) by TaserTheFox, with additional functionality.
 
-The original language was missing some features I wanted to use, so I had an AI implement them rather than diving into the code myself.
+The original language was missing some features I wanted to use, so I updated the language making it more viable and complete.
 
 ---
 
