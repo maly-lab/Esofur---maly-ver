@@ -98,4 +98,4 @@ To run `.EsoFur` files directly from VS Code:
 
 ## Commands
 
-A full list of EsoFur commands can be found in `EsoFur Modules.txt`.
+A full list of EsoFur commands can be found in `EsoFur Modules.md`.
