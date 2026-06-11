@@ -10,6 +10,7 @@ The original language was missing some features I wanted to use, so I updated th
 
 - Enabled terminal usage (Linux & Windows)
 - Enabled VS Code integration
+- Additional features (new documentation found in `EsoFur Modules.md`)
 
 ---
 
