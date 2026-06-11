@@ -2,21 +2,30 @@
 echo Installing EsoFur...
 
 set SCRIPT_DIR=%~dp0
+set SCRIPT_DIR_CLEAN=%SCRIPT_DIR:~0,-1%
 
-:: Wrapper for Command Prompt
+:: ---- Create Command Prompt wrapper ----
 (
     echo @echo off
     echo python "%SCRIPT_DIR%esofur" %%*
 ) > "%SCRIPT_DIR%esofur.bat"
 
-:: Wrapper for PowerShell / VS Code
+:: ---- Create PowerShell wrapper ----
 (
     echo python "%SCRIPT_DIR%esofur" $args
 ) > "%SCRIPT_DIR%esofur.ps1"
 
-:: Add project folder to PATH permanently
-setx PATH "%PATH%;%SCRIPT_DIR%"
+:: ---- Add to User PATH via PowerShell (avoids setx 1024-char limit) ----
+set ESOFUR_INSTALL_DIR=%SCRIPT_DIR_CLEAN%
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$dir=$env:ESOFUR_INSTALL_DIR; $cur=[Environment]::GetEnvironmentVariable('PATH','User'); if(($cur -split ';') -notcontains $dir){ [Environment]::SetEnvironmentVariable('PATH',$cur+';'+$dir,'User'); Write-Host 'Added to PATH.' } else { Write-Host 'Already in PATH - skipping.' }"
 
+if %ERRORLEVEL% neq 0 (
+    echo Warning: Could not update PATH automatically.
+    echo Please add the following folder to your PATH manually:
+    echo %SCRIPT_DIR_CLEAN%
+)
+
+echo.
 echo Installed successfully!
 echo Restart your terminal or VS Code for PATH changes to take effect.
-echo Try: esofur run test.EsoFur
+echo Then try: esofur test.EsoFur

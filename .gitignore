@@ -1,3 +1,5 @@
 __pycache__/exceptions.cpython-311.pyc
 .vscode/
 !install.bat
+__pycache__/
+*.pyc
