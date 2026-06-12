@@ -1,8 +1,8 @@
 # EsoFur Interpreter — Modified
 
-A fork of the [EsoFur Interpreter](https://github.com/TaserTheFox/EsoFur-Interpreter) by TaserTheFox, with additional functionality.
+A fork of the [EsoFur Interpreter](https://github.com/TaserTheFox/EsoFur-Interpreter) by TaserTheFox, with AI-assisted modifications.
 
-The original language was missing some features I wanted to use, so I updated the language making it more viable and complete.
+The original language was missing some features I wanted to use, so I had an AI implement them rather than diving into the code myself.
 
 ---
 
@@ -10,7 +10,6 @@ The original language was missing some features I wanted to use, so I updated th
 
 - Enabled terminal usage (Linux & Windows)
 - Enabled VS Code integration
-- Additional features (new documentation found in `EsoFur Modules.md`)
 
 ---
 
@@ -31,19 +30,11 @@ chmod +x install.sh
 
 ### Windows
 
-> ⚠️ Windows instructions are untested — use at your own risk.
-
 1. Download or clone the repo
 2. Open Command Prompt in the project folder and run:
 
 ```bat
 install.bat
-```
-
-Alternatively, you can run the interpreter directly with:
-
-```bat
-python esofur_engine.py
 ```
 
 ---
@@ -99,4 +90,4 @@ To run `.EsoFur` files directly from VS Code:
 
 ## Commands
 
-A full list of EsoFur commands can be found in `EsoFur Modules.md`.
+A full list of EsoFur commands can be found in `docs/EsoFur_Modules.md`.
