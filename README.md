@@ -73,18 +73,14 @@ esofur
 
 To run `.EsoFur` files directly from VS Code:
 
-1. Open the folder containing your `.EsoFur` file
-2. Create a `.vscode` folder inside it
-3. Inside `.vscode`, create the following two files:
-
-**`tasks.json`** — copy the contents from `docs/vs_tasks.txt` in the repo
+1. In `docs`
+2. Open either
+- `windows vs code` (if on windows)
+- `linux vs code` (if on linux)
+3. copy the `.vscode` folder and paste it into your project folder
 
 - Enables running your file with `Ctrl+Shift+B`
-
-**`launch.json`** — copy the contents from `docs/vs_launch.txt` in the repo
-
 - Enables running your file with `F5`
-- Requires `tasks.json` to be set up first
 
 ---
 
