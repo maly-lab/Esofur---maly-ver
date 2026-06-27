@@ -8,6 +8,7 @@ compiler = EsoFurCompiler()
 
 # ---------------- RUN FILE MODE ----------------
 def run_file(path):
+    compiler.script_dir = os.path.dirname(os.path.abspath(path))
     with open(path, "r") as f:
         code = f.read()
     compiler.compile(code)

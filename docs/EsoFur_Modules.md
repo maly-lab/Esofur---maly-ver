@@ -65,6 +65,9 @@
 
 ## Functions
 
+Function bodies can be indented for readability and nested function definitions, but `Finishes Fursuit` is still required to end a function.
+Indented lines are preserved for clarity, and nested `Makes Fursuit` blocks inside functions work naturally with explicit `Finishes Fursuit` termination.
+
 | Command | Description | Example |
 |---------|-------------|---------|
 | `Makes Fursuit {name}` | Defines a function | `Makes Fursuit Greet` |

@@ -1,4 +1,5 @@
 import math
+import os
 import re
 import sys
 import random
@@ -16,24 +17,40 @@ class EsoFurCompiler:
         self.in_comment = False
         self.imported = []
         self.imported_local = []
+        self.module_code = ""
         self.functions = {}  # stores function definitions
         self.in_function = False  # flag for when we're inside a function definition
         self.current_function = None  # name of function being defined
         self.return_value = None  # value to return from function (if any)
+        self.script_dir = None  # directory of the currently running .EsoFur script
 
     # ---------------- COMPILER CORE ----------------
     def compile(self, code):
-        lines = code.split("\n")
+        raw_lines = code.split("\n")
+        lines = []
+        for raw_line in raw_lines:
+            expanded = raw_line.expandtabs(4)
+            stripped = expanded.strip()
+            indent = len(expanded) - len(expanded.lstrip(" "))
+            lines.append({
+                "raw": raw_line,
+                "expanded": expanded,
+                "stripped": stripped,
+                "indent": indent,
+            })
+
         i = 0
         built = False
-        module = ""
+        module = self.module_code
+        nested_function_depth = 0
 
-        if sum(1 for l in lines if "Maws" in l.strip()) != sum(1 for l in lines if "Paws" in l.strip()):
-        	raise _unmatchedComment()
+        if sum(1 for l in raw_lines if "Maws" in l.strip()) != sum(1 for l in raw_lines if "Paws" in l.strip()):
+            raise _unmatchedComment()
 
         while i < len(lines):
-            line = lines[i].strip()
-
+            line_obj = lines[i]
+            line = line_obj["stripped"]
+            indent = line_obj["indent"]
             if not line:
                 i += 1
                 continue
@@ -46,7 +63,9 @@ class EsoFurCompiler:
                 i += 1
                 if i >= len(lines):
                     return
-                line = lines[i].strip()
+                line_obj = lines[i]
+                line = line_obj["stripped"]
+                indent = line_obj["indent"]
 
             # START MARKER
             if line == "OwO What's This?":
@@ -56,10 +75,19 @@ class EsoFurCompiler:
             # ---------------- INSIDE FUNCTION BODY ----------------
             if self.in_function:
                 if line == "Finishes Fursuit":
+                    if nested_function_depth > 0:
+                        nested_function_depth -= 1
+                        self.functions[self.current_function]["body"].append(line)
+                        i += 1
+                        continue
                     self.in_function = False
                     self.current_function = None
-                else:
-                    self.functions[self.current_function]["body"].append(line)
+                    i += 1
+                    continue
+
+                if line.startswith("Makes Fursuit"):
+                    nested_function_depth += 1
+                self.functions[self.current_function]["body"].append(line)
                 i += 1
                 continue
 
@@ -75,7 +103,7 @@ class EsoFurCompiler:
             if line == "QwQ":
                 return
 
-            if "QwQ" not in [l.strip() for l in lines]:
+            if "QwQ" not in [l["stripped"] for l in lines]:
                 raise _noEnd()
 
             # ---------------- COMMENTS ----------------
@@ -97,7 +125,7 @@ class EsoFurCompiler:
                 continue
 
             # ---------------- LABELS ----------------
-            if line.startswith("Marks"):
+            if line.startswith("Marks") and not line.startswith("Marks Den "):
                 i += 1
                 continue
 
@@ -162,7 +190,14 @@ class EsoFurCompiler:
                 func_compiler.symbol_table = self.symbol_table
                 func_compiler.local_table = {}
                 func_compiler.functions = self.functions
-                func_compiler.compile("OwO What's This?\n" + func_code + "\nQwQ")
+                func_compiler.imported = self.imported.copy()
+                func_compiler.imported_local = self.imported_local.copy()
+                func_compiler.module_code = self.module_code
+                func_compiler.script_dir = self.script_dir
+                try:
+                    func_compiler.compile("OwO What's This?\n" + func_code + "\nQwQ")
+                except Exception:
+                    raise
 
                 # Restore symbol table, keeping changes to existing global variables
                 # but ignoring any new variables created inside the function
@@ -184,52 +219,77 @@ class EsoFurCompiler:
                 continue
 
             # ---------------- SYNTAX CHECK (ignores quoted strings) ----------------
-            line_no_strings = re.sub(r'"[^"]*"', '', line)
-            if line_no_strings.strip() and not line_no_strings.istitle():
+            line_no_strings = re.sub(r'"[^\"]*"|\'[^\']*\'', '', line)
+            line_no_strings = re.sub(r'\s+', ' ', line_no_strings).strip()
+            if line_no_strings and not (
+                line_no_strings[0].isupper()
+                or line_no_strings[0].isdigit()
+                or line_no_strings.startswith("*")
+            ):
                 raise _capError()
 
             # ---------------- IMPORTS ----------------
             if line.startswith("Drag"):
                 parse = line.split()
-                if len(parse) < 4 or parse[2] != "From":
+                if len(parse) < 4 or "From" not in parse:
+                    raise _capError()
+                from_index = parse.index("From")
+                name = " ".join(parse[1:from_index])
+                module_name = parse[from_index + 1] if from_index + 1 < len(parse) else None
+                if not module_name:
                     raise _capError()
                 try:
-                    if parse[1] == "Everything":
-                        if parse[3] in self.imported:
+                    if name == "Everything":
+                        if module_name in self.imported:
                             raise _alreadyImported()
-                        module += "\n" + self._grabfile(parse[3])
-                        self.imported.append(parse[3])
+                        module += "\n" + self._grabfile(module_name)
+                        self.imported.append(module_name)
                     else:
-                        key = parse[3] + "." + parse[1]
-                        if key in self.imported_local or parse[3] in self.imported:
+                        key = name
+                        if key in self.imported_local or module_name in self.imported:
                             raise _alreadyImported()
-                        module += "\n" + self._grabfile(parse[3], parse[1])
+                        module += "\n" + self._grabfile(module_name, name)
                         self.imported_local.append(key)
-                        self.imported.append(parse[3])
+                        self.imported.append(module_name)
+                    self.module_code = module
                 except (_alreadyImported, _importError):
                     raise
                 except Exception:
-                    raise _importError(parse[3])
+                    raise _importError(module_name)
 
                 try:
-                    parse_value = self._parse_value
-                    exec(module, globals(), locals())
+                    exec_locals = {
+                        "self": self,
+                        "line": line,
+                        "parse_value": self._parse_value,
+                        "handled": False,
+                    }
+                    exec(self._prepare_module_code(module), globals(), exec_locals)
                 except SystemExit:
                     pass
                 except Exception:
-                    raise _importError(parse[3])
+                    raise _importError(module_name)
 
                 i += 1
                 continue
 
             # Run already-loaded module code
             try:
-                parse_value = self._parse_value
+                exec_locals = {
+                    "self": self,
+                    "line": line,
+                    "parse_value": self._parse_value,
+                    "handled": False,
+                }
                 for mod in self.imported_local:
                     if line.startswith(mod):
-                        line = line.split(".")[1]
+                        exec_locals["line"] = line
                         break
-                exec(module, globals(), locals())
+                module_to_exec = self._prepare_module_code(module)
+                exec(module_to_exec, globals(), exec_locals)
+                if exec_locals.get("handled"):
+                    i += 1
+                    continue
             except SystemExit:
                 i += 1
                 continue
@@ -260,8 +320,10 @@ class EsoFurCompiler:
                     value = defaults[type_name]
                 if is_local:
                     self.local_table[var_name] = value
+                
                 else:
                     self.symbol_table[var_name] = value
+                    
                 i += 1
                 continue
 
@@ -279,7 +341,7 @@ class EsoFurCompiler:
 
             # ---------------- ASSIGNMENT ----------------
             if "Pounces On" in line:
-                parts = line.split("Pounces On")
+                parts = line.split("Pounces On")     
                 if len(parts) != 2:
                     raise _capError()
                 value_str = parts[0].strip()
@@ -287,10 +349,33 @@ class EsoFurCompiler:
                 if var_name not in self.symbol_table and var_name not in self.local_table:
                     raise _undeclaredVar(var_name)
                 value = self._assign(value_str)
+                
                 if var_name in self.local_table:
                     self.local_table[var_name] = value
                 else:
                     self.symbol_table[var_name] = value
+                i += 1
+                continue
+
+            # ---------------- MARKS DEN (SKIPPABLE BLOCKS) ----------------
+            if line.startswith("Marks Den "):
+                # Normal execution hits a den - skip over the entire block
+                i = self._find_stops_marking(lines, i) + 1
+                continue
+
+            if line == "Stops Marking":
+                # Reached the end of a den body that was jumped into - just advance
+                i += 1
+                continue
+
+            # ---------------- MARKS DEN (SKIPPABLE BLOCKS) ----------------
+            if line.startswith("Marks Den "):
+                # Normal execution flow hits a den — skip the entire block
+                i = self._find_stops_marking(lines, i) + 1
+                continue
+
+            if line == "Stops Marking":
+                # End of a den body reached after a Nuzzles jump — just advance
                 i += 1
                 continue
 
@@ -367,23 +452,6 @@ class EsoFurCompiler:
                 if len(parts) < 5:
                     raise _undefinedKeyword(self.imported, line, self.symbol_table)
                 self.symbol_table[parts[4]] = random.random()
-                i += 1
-                continue
-
-            # ---------------- RANDOM INT ------------------
-            if line.startswith("Paw A Die With") and "Sides" in line and "Into" in line:
-                parts = line.split()
-                if len(parts) < 8 or parts[2] != "Die" or parts[3] != "With" or parts[5] != "Sides" or parts[6] != "Into":
-                    raise _undefinedKeyword(self.imported, line, self.symbol_table)
-                sides = self._parse_value(parts[4])
-                var_name = parts[7]
-                if not isinstance(sides, int) or sides <= 0:
-                    raise _castingFail()
-                result = random.randint(1, sides)
-                if var_name in self.local_table:
-                    self.local_table[var_name] = result
-                else:
-                    self.symbol_table[var_name] = result
                 i += 1
                 continue
 
@@ -566,6 +634,41 @@ class EsoFurCompiler:
                 i += 1
                 continue
 
+            # ---------------- CHECK IF VALUE IS IN A LIST ----------------
+            if "Cuddles In" in line and line.endswith("?"):
+                line_no_q = line.rstrip("?").strip()
+                target_var = "_result"
+                # Handle optional "Into [variable]"
+                if " Into " in line_no_q:
+                    parts_into = line_no_q.rsplit(" Into ", 1)
+                    line_no_q = parts_into[0]
+                    target_var = parts_into[1].strip()
+                    if target_var not in self.symbol_table and target_var not in self.local_table:
+                        raise _undeclaredVar(target_var)
+                
+                # Parse "value Cuddles In collection"
+                parts = line_no_q.split("Cuddles In")
+                if len(parts) != 2:
+                    raise _undefinedKeyword(self.imported, line, self.symbol_table)
+                value_name = parts[0].strip()
+                collection_name = parts[1].strip()
+                
+                value = self._parse_value(value_name)
+                collection = self._parse_value(collection_name)
+                
+                # Check if value is in collection (works with list, tuple, set, str, var, int, float, furpile)
+                try:
+                    result = 1 if value in collection else 0
+                except TypeError:
+                    raise _castingFail()
+                
+                if target_var in self.local_table:
+                    self.local_table[target_var] = result
+                else:
+                    self.symbol_table[target_var] = result
+                i += 1
+                continue
+
             # ---------------- REMOVE FROM LIST/FURPILE ----------------
             if line.startswith("Escort") and "To" in line and "From" in line:
                 rest = line[len("Escort"):].strip()
@@ -656,6 +759,31 @@ class EsoFurCompiler:
                 i += 1
                 continue
 
+            # Handle multi-line comment state
+            if line == "Maws":
+                self.in_comment = True
+                i += 1
+                continue
+
+            if line == "Paws":
+                self.in_comment = False
+                i += 1
+                continue
+
+            if self.in_comment:
+                i += 1
+                continue
+
+            # ---------------- SYNTAX CHECK (ignores quoted strings) ----------------
+            line_no_strings = re.sub(r'"[^\"]*"|\'[^\']*\'', '', line)
+            line_no_strings = re.sub(r'\s+', ' ', line_no_strings).strip()
+            if line_no_strings and not (
+                line_no_strings.istitle()
+                or line_no_strings[0].isdigit()
+                or line_no_strings.startswith("*")
+            ):
+                raise _capError()
+
             # ---------------- UNKNOWN SYNTAX ----------------
             raise _undefinedKeyword(self.imported, line, self.symbol_table)
 
@@ -726,9 +854,13 @@ class EsoFurCompiler:
                 raise _capError()
             value_str = parts[0].strip()
             var_name = parts[1].strip()
-            if var_name not in self.symbol_table:
+            if var_name not in self.symbol_table and var_name not in self.local_table:
                 raise _undeclaredVar(var_name)
-            self.symbol_table[var_name] = self._assign(value_str)
+            value = self._assign(value_str)
+            if var_name in self.local_table:
+                self.local_table[var_name] = value
+            else:
+                self.symbol_table[var_name] = value
             return None
 
         # Output
@@ -925,6 +1057,14 @@ class EsoFurCompiler:
             self.symbol_table[tgt_name] = length
             return None
 
+        # Marks Den and Stops Marking are multi-line constructs not supported in REPL mode
+        if line.startswith("Marks Den ") or line == "Stops Marking":
+            return None
+
+        # Marks Den and Stops Marking are multi-line constructs — not supported in REPL mode
+        if line.startswith("Marks Den ") or line == "Stops Marking":
+            return None
+
         # ---------------- MATHS OPERATIONS ----------------
         # Adds second value to first value and stores in first value
         if "Inflates By" in line:
@@ -967,10 +1107,30 @@ class EsoFurCompiler:
     # ---------------- HELPER METHODS ----------------
     # ================================================
 
-    # Finds the index of a label in the source code
+    # Finds the matching Stops Marking for a Marks Den, handling nesting
+    def _find_stops_marking(self, lines, start):
+        depth = 0
+        for idx in range(start + 1, len(lines)):
+            stripped = lines[idx]["stripped"]
+            if stripped.startswith("Marks Den "):
+                depth += 1
+            if stripped == "Stops Marking":
+                if depth == 0:
+                    return idx
+                depth -= 1
+        raise _noEnd()
+
+    # Finds the index of a label in the source code.
+    # For simple Marks labels, returns the label line itself.
+    # For Marks Den labels, returns the line AFTER the header so execution enters the body directly.
     def _find_label_index(self, lines, label):
         for idx, l in enumerate(lines):
-            if l.strip().startswith("Marks") and l.strip().split(" ")[1] == label:
+            stripped = l["stripped"]
+            # Den label - jump past the header into the body
+            if stripped.startswith("Marks Den ") and stripped.split(" ")[2] == label:
+                return idx + 1
+            # Simple passthrough label - jump to the label line itself
+            if stripped.startswith("Marks ") and not stripped.startswith("Marks Den ") and stripped.split(" ")[1] == label:
                 return idx
         raise _noLabel(label)
 
@@ -978,7 +1138,7 @@ class EsoFurCompiler:
     def _find_loop_start_index(self, lines, end_index):
         loop_count = 0
         for idx in range(end_index - 1, -1, -1):
-            stripped = lines[idx].strip()
+            stripped = lines[idx]["stripped"]
             if stripped.startswith("*Stops Roleplaying Because Of") and stripped.endswith("*"):
                 loop_count += 1
             if stripped == "*Starts Roleplaying*":
@@ -987,6 +1147,20 @@ class EsoFurCompiler:
                 else:
                     loop_count -= 1
         raise _noStart()
+
+    def _format_string(self, text):
+        mapping = {**self.symbol_table, **self.local_table}
+
+        class _SafeMapping(dict):
+            def __missing__(self, key):
+                raise _undeclaredVar(key)
+
+        try:
+            return text.format_map(_SafeMapping(mapping))
+        except KeyError as e:
+            raise _undeclaredVar(str(e))
+        except Exception:
+            raise _jumpError(text, self.symbol_table)
 
     # Parses a value string for assignment, handling literals, variables, and indexed access
     def _assign(self, value_str):
@@ -1007,8 +1181,11 @@ class EsoFurCompiler:
             return float(value_str)
         except ValueError:
             pass
-        if '"' in value_str:
-            return value_str[value_str.find('"') + 1:value_str.rfind('"')]
+        if (value_str.startswith('"') and value_str.endswith('"')) or (value_str.startswith("'") and value_str.endswith("'")):
+            text = value_str[1:-1]
+            if "{" in text and "}" in text:
+                return self._format_string(text)
+            return text
         if value_str in self.local_table:
             return self.local_table[value_str]
         if value_str in self.symbol_table:
@@ -1086,12 +1263,62 @@ class EsoFurCompiler:
 
     # Grabs the source code of a module, or a specific block within that module if a block name is provided
     def _grabfile(self, module, *word):
-        with open(module + ".EsoFurMod", "r") as f:
-            source_code = f.read()
+        repo_dir = os.path.dirname(os.path.abspath(__file__))
+        module_paths = []
+        search_dirs = [os.path.join(repo_dir, "modules")]
+        if self.script_dir:
+            search_dirs.append(self.script_dir)
+
+        for search_dir in search_dirs:
+            module_paths.append(os.path.join(search_dir, module + ".EsoFurMod"))
+            if os.path.isdir(search_dir):
+                lowercase_module = module.lower() + ".esofurmod"
+                for filename in os.listdir(search_dir):
+                    if filename.lower() == lowercase_module:
+                        fallback_path = os.path.join(search_dir, filename)
+                        if fallback_path not in module_paths:
+                            module_paths.append(fallback_path)
+
+        source_code = None
+        for path in module_paths:
+            if os.path.isfile(path):
+                with open(path, "r") as f:
+                    source_code = f.read()
+                break
+        if source_code is None:
+            raise _importError(module)
         if not word:
             return source_code
+
+        block_name = word[0]
         blocks = source_code.split("#NEXT")
         for block in blocks:
-            if block.startswith("\n#" + word[0]):
+            stripped = block.lstrip("\n")
+            if stripped.startswith("#" + block_name):
                 return block
+
+        # fallback: support plain '#Name' headers without #NEXT delimiters
+        lines = source_code.splitlines()
+        current = None
+        matched = []
+        for line in lines:
+            if line.startswith("#"):
+                header = line[1:].strip()
+                if current and current[0] == block_name:
+                    break
+                current = (header, [line])
+                if header == block_name:
+                    matched = current[1]
+            elif current and current[0] == block_name:
+                matched.append(line)
+        if matched:
+            return "\n".join(matched)
+
         raise _importError(module)
+
+    def _prepare_module_code(self, module_code):
+        # Add a handled flag to top-level module handlers so the engine can skip parsed
+        # lines after a module block successfully processes them.
+        def _insert_handled(match):
+            return f"{match.group(0)}\n    handled = True"
+        return re.sub(r'^if [^\n]+:', _insert_handled, module_code, flags=re.MULTILINE)

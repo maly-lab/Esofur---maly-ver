@@ -1,0 +1,50 @@
+#NEXT
+#Paw A Die
+if line.startswith("Paw A Die With") and "Sides" in line and "Into" in line:
+    import random
+    parts = line.split()
+    if len(parts) < 8 or parts[2] != "Die" or parts[3] != "With" or parts[5] != "Sides" or parts[6] != "Into":
+        raise _undefinedKeyword(self.imported, line, self.symbol_table)
+    sides = self._parse_value(parts[4])
+    var_name = parts[7]
+    if not isinstance(sides, int) or sides <= 0:
+        raise _castingFail()
+    result = random.randint(1, sides)
+    if var_name in self.local_table:
+        self.local_table[var_name] = result
+    else:
+        self.symbol_table[var_name] = result
+
+#NEXT
+#Count
+if line.startswith("Counts ") and (" in " in line or " In " in line or " From " in line):
+    rest = line[len("Counts "):].rstrip(":")
+    result_var = "_result"
+    if " As " in rest:
+        rest, result_var = rest.rsplit(" As ", 1)
+        result_var = result_var.strip().rstrip(":")
+        if not result_var:
+            raise _undefinedKeyword(self.imported, line, self.symbol_table)
+    sep = None
+    for candidate in [" in ", " In ", " From "]:
+        if candidate in rest:
+            sep = candidate
+            break
+    if sep is None:
+        raise _undefinedKeyword(self.imported, line, self.symbol_table)
+    item_part, list_name = rest.rsplit(sep, 1)
+    if not item_part or not list_name:
+        raise _undefinedKeyword(self.imported, line, self.symbol_table)
+    item_value = self._parse_value(item_part.strip())
+    collection = self._parse_value(list_name.strip().rstrip(":"))
+    if hasattr(collection, "count") and not isinstance(collection, set):
+        count = collection.count(item_value)
+    elif isinstance(collection, set):
+        count = 1 if item_value in collection else 0
+    else:
+        raise _castingFail()
+    if result_var in self.local_table:
+        self.local_table[result_var] = count
+    else:
+        self.symbol_table[result_var] = count
+
